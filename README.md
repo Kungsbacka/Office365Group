@@ -57,7 +57,7 @@ AS
 BEGIN
 	SET NOCOUNT ON;
     
-    IF NOT EXISTS (SELECT 1 FROM dbo.Office365NewGroup WHERE id = @id)
+    IF NOT EXISTS (SELECT 1 FROM dbo.Office365Group WHERE id = @id)
         THROW 50000, 'A group with requested ID was not found.', 1;
 
     UPDATE dbo.Office365Group SET
