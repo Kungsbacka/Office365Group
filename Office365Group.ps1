@@ -5,6 +5,13 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\SqlBackend.ps1"
 . "$PSScriptRoot\Utils.ps1"
 
+$groupData = Get-GroupData
+
+If ($groupData -eq $null)
+{
+    exit
+}
+  
 if (-not (Get-PSSession -Name 'ExchangeOnline' -ErrorAction SilentlyContinue))
 {
     $params = @{
@@ -23,6 +30,7 @@ if (-not (Get-PSSession -Name 'ExchangeOnline' -ErrorAction SilentlyContinue))
         Session = $session
         DisableNameChecking = $true
         CommandName = @(
+            'Get-UnifiedGroup'
             'New-UnifiedGroup'
             'Set-UnifiedGroup'
             'Add-UnifiedGroupLinks'
@@ -32,7 +40,7 @@ if (-not (Get-PSSession -Name 'ExchangeOnline' -ErrorAction SilentlyContinue))
     Import-PSSession @params | Out-Null
 }
 
-$groupData = Get-GroupData -Create
+# Generate names and check for duplicates
 foreach ($item in $groupData)
 {
     $aliasSuffix = '_' + ([guid]::NewGuid() -split '-')[0]
@@ -58,7 +66,6 @@ foreach ($item in $groupData)
             }
             $item.GeneratedDisplayName = "$($item.RequestedName) $($item.RequestedSuffix) $sem"
             $item.GeneratedAlias = (ConvertTo-Alias -InputObject $item.GeneratedDisplayName) + $aliasSuffix
-            $item | Set-GroupData
             break
         }
         default
@@ -68,10 +75,28 @@ foreach ($item in $groupData)
             continue
         }
     }
+    try
+    {
+        if (Get-UnifiedGroup -Filter "DisplayName -eq '$($item.GeneratedDisplayName)'")
+        {
+            $item.ErrorText = "A group with the display name ""$($item.GeneratedDisplayName)"" already exists"
+            $item.DuplicateDisplayName = $true
+        }
+    }
+    catch
+    {
+        $item.ErrorText = $_.Exception
+    }
+    $item | Set-GroupData
 }
 
+# Create new groups
 foreach ($item in $groupData)
 {
+    if ($item.ErrorText -ne $null)
+    {
+        continue
+    }
     $params = @{
         DisplayName = $item.GeneratedDisplayName
         Alias = $item.GeneratedAlias
@@ -100,21 +125,32 @@ $smtpClient = [System.Net.Mail.SmtpClient]@{
     UseDefaultCredentials = $false
     Host = $Script:Config.SmtpServer
 }
-$groupData = Get-GroupData -Report
 foreach ($item in $groupData)
 {
     $msg = [System.Net.Mail.MailMessage]@{
         BodyEncoding = [System.Text.Encoding]::UTF8
         SubjectEncoding = [System.Text.Encoding]::UTF8
         From = $Script:Config.SmtpFrom
-        Subject = $Script:Config.SmtpSubject
-        Body = $Script:Config.SmtpBody -f $item.GeneratedDisplayName
     }
     $msg.To.Add($item.RequestedOwner)
+    if ($item.ErrorText -eq $null -and -not $item.DuplicateDisplayName)
+    {
+        $msg.Subject = $Script:Config.SuccessMail.Subject
+        $msg.Body = $Script:Config.SuccessMail.Body -f $item.GeneratedDisplayName
+    }
+    elseif ($item.DuplicateDisplayName)
+    {
+        $msg.Subject = $Script:Config.DuplicateMail.Subject
+        $msg.Body = $Script:Config.DuplicateMail.Body -f $item.GeneratedDisplayName
+    }
+    else
+    {
+        $msg.Subject = $Script:Config.ErrorMail.Subject
+        $msg.Body = $Script:Config.ErrorMail.Body -f $item.GeneratedDisplayName
+    }
     try
     {
         $smtpClient.Send($msg)
-        $item.ReportedOn = Get-Date
     }
     catch
     {

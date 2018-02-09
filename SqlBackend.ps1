@@ -23,10 +23,6 @@
         $CreatedOn,
 
         [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
-        [object]
-        $ReportedOn,
-
-        [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
         [string]
         $ErrorText
     )
@@ -51,10 +47,6 @@
     {
         $params.Parameter.created = $CreatedOn
     }
-    if ($ReportedOn)
-    {
-        $params.Parameter.reported = $ReportedOn
-    }
     if ($ErrorText)
     {
         $params.Parameter.error = $ErrorText
@@ -64,28 +56,7 @@
 
 function Get-GroupData
 {
-    param
-    (
-        [Parameter(Mandatory=$true,ParameterSetName='Create')]
-        [switch]
-        $Create,
-        [Parameter(Mandatory=$true,ParameterSetName='Report')]
-        [switch]
-        $Report,
-        [Parameter(Mandatory=$true,ParameterSetName='Failed')]
-        [switch]
-        $Failed
-    )
-    $params = @{created = 0; reported = 0; errored = 0}
-    if ($Report)
-    {
-        $params.created = 1
-    }
-    if ($Failed)
-    {
-        $params.errored = 1
-    }
-    $groups = Invoke-StoredProcedure -Name 'spO365GetGroupData' -Type Reader -Parameter $params
+    $groups = Invoke-StoredProcedure -Name 'spO365GetGroupData' -Type 'Reader'
     foreach ($group in $groups)
     {
         $output = [pscustomobject]@{
@@ -98,7 +69,7 @@ function Get-GroupData
             GeneratedAlias = $group.generatedAlias
             GeneratedDisplayName = $group.generatedDisplayName
             CreatedOn = $group.created
-            ReportedOn = $group.reported
+            DuplicateDisplayName = $false
             ErrorText = $group.error
         }
         Write-Output -InputObject $output
@@ -178,9 +149,12 @@ function New-SqlCommand
         CommandType = $CommandType
         CommandText = $CommandText
     }
-    foreach ($item in $Parameter.GetEnumerator())
+    if ($Parameter -ne $null)
     {
-        [void]$command.Parameters.AddWithValue($item.Name, $item.Value)
+        foreach ($item in $Parameter.GetEnumerator())
+        {
+            [void]$command.Parameters.AddWithValue($item.Name, $item.Value)
+        }
     }
     Write-Output -InputObject $command
 }
