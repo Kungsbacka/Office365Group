@@ -1,4 +1,4 @@
-$Script:Config = @{
+﻿$Script:Config = @{
     O365User = '<office 365 user that can manage groups>'
     O365Password = '<encrypted password>'
     SqlServer = '<server instance>'
@@ -9,7 +9,8 @@ $Script:Config = @{
         Subject = 'New Office 365 group ready'
         Body = "Hi,`r`n`r`nYour new group ""{0}"" is now available in Office 365. `r`n`r`nEnjoy!"
     }
-    ErrorMail = @{        Subject = 'Create Office 365 group failed'
+    ErrorMail = @{
+        Subject = 'Create Office 365 group failed'
         Body = "Hi,`r`n`r`nThere was an error when the group ""{0}"" was created."
     }
     DuplicateMail = @{
